@@ -236,7 +236,7 @@ export function SessionDetailPage() {
                     <tr key={track.id} className="border-b border-edge/50">
                       <td className="px-3 py-2 pr-4">{track.participant_name}</td>
                       <td className="py-2 pr-4 text-gray-400">
-                        {track.type === "pcm" ? "audio (48kHz WAV)" : track.type}
+                        {track.type === "pcm" ? "audio (experimental PCM)" : track.type}
                         {track.width ? ` · ${track.width}×${track.height}` : ""}
                       </td>
                       <td className="py-2 pr-4">
@@ -260,7 +260,7 @@ export function SessionDetailPage() {
                             {track.width !== null && (
                               <a className="text-accent-2 hover:underline" href={`/api/tracks/${track.id}/download?kind=mp4`}>MP4</a>
                             )}
-                            <a className="text-accent-2 hover:underline" href={`/api/tracks/${track.id}/download?kind=wav`}>WAV</a>
+                            <a className="text-accent-2 hover:underline" href={`/api/tracks/${track.id}/download?kind=wav`}>WAV{track.type === "camera" ? " (recommended)" : ""}</a>
                             <a className="text-accent-2 hover:underline" href={`/api/tracks/${track.id}/download?kind=raw`}>Raw</a>
                             {track.enhanced ? (
                               <a className="text-emerald-300 hover:underline" href={`/api/tracks/${track.id}/download?kind=enhanced`}>
@@ -270,7 +270,7 @@ export function SessionDetailPage() {
                               track.type !== "screen" && (
                                 <button
                                   className="text-accent-2 hover:underline"
-                                  title="Noise reduction + loudness normalization; mixes prefer it automatically"
+                                  title="Noise reduction + loudness normalization for this source; mixes prefer camera audio"
                                   onClick={async () => {
                                     await api(`/api/tracks/${track.id}/enhance`, { body: {} });
                                     await load();

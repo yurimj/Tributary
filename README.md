@@ -43,8 +43,8 @@ participant — plus mixed exports — no matter how rough the live connection w
   Optional **auto-record** starts the take when the first guest joins.
 - **Pause uploads** — defer bandwidth use on weak connections while local recording continues.
 - **True 48kHz WAV capture** — an AudioWorklet taps the mic and records uncompressed PCM as a
-  separate per-participant track (no codec round-trip), used preferentially for mixes and
-  transcription. Toggle in the lobby, on by default.
+  separate per-participant track (no codec round-trip), kept as an experimental fallback for mixes and
+  transcription. Toggle in the lobby, off by default in this fork; see [audio reliability notes](docs/AUDIO-RELIABILITY.md).
 - **Screen shares are their own recorded tracks**, start/stoppable mid-recording.
 - **Upload resilience** — idempotent chunk-by-index uploads, resume after refresh/offline, and a
   recovery banner that scans IndexedDB on any page load and finishes uploads from crashed tabs
@@ -83,7 +83,7 @@ participant — plus mixed exports — no matter how rough the live connection w
 - **Teams** — invite members to a studio by email; owners manage the team, editors do
   everything else.
 - **Audio enhancement** — per-track noise reduction + loudness normalization (−16 LUFS);
-  mixes automatically prefer enhanced audio.
+  mixes prefer MediaRecorder audio and use its enhanced version when available.
 - **Mobile app (early)** — Expo shell (`mobile/`) wrapping the studio with native camera/mic
   permissions and keep-awake; your phone joins as a fully recorded extra camera. This is a
   young app shell, not a polished native app yet — expect rough edges.

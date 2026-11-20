@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
+import { selectVoiceTracks } from "../lib/voice-tracks.js";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
@@ -97,7 +98,7 @@ async function transcribeRecording(transcriptId: string): Promise<void> {
     await ensureModel();
 
     // Speech comes from per-participant mic tracks; screen audio is skipped.
-    // Prefer the uncompressed PCM track when the participant has one.
+    // Prefer the parallel MediaRecorder WAV; use PCM only as a fallback.
     const candidates = db
       .prepare(
         `SELECT t.*, p.name AS participant_name FROM tracks t
@@ -105,14 +106,7 @@ async function transcribeRecording(transcriptId: string): Promise<void> {
          WHERE t.recording_id = ? AND t.type IN ('camera', 'pcm') AND t.status = 'ready'`
       )
       .all(transcript.recording_id) as (TrackRow & { participant_name: string })[];
-    const byParticipant = new Map<string, (typeof candidates)[number]>();
-    for (const track of candidates) {
-      const existing = byParticipant.get(track.participant_id);
-      if (!existing || (track.type === "pcm" && existing.type !== "pcm")) {
-        byParticipant.set(track.participant_id, track);
-      }
-    }
-    const tracks = [...byParticipant.values()];
+    const tracks = selectVoiceTracks(candidates, (track) => fs.existsSync(wavTrackPath(track.id)));
     if (tracks.length === 0) throw new Error("No ready audio tracks to transcribe");
 
     const allSegments: TranscriptSegment[] = [];

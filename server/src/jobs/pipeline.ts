@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { selectVoiceTracks } from "../lib/voice-tracks.js";
 import {
   db,
   type ExportParams,
@@ -310,7 +311,9 @@ async function renderExport(exportId: string): Promise<void> {
     if (tracks.length === 0) throw new Error("No ready tracks for this recording");
 
     // Video comes from the MP4s (audio muted); voice audio comes from one WAV
-    // per participant, preferring enhanced > uncompressed PCM > camera audio.
+    // per participant, preferring MediaRecorder audio over experimental PCM.
+    // Enhancement is applied only after choosing the source, never as a reason
+    // to promote a potentially damaged PCM track.
     const inputs: MixInput[] = [];
     let totalDurationMs = 0;
 
@@ -323,17 +326,8 @@ async function renderExport(exportId: string): Promise<void> {
       totalDurationMs = Math.max(totalDurationMs, offsetMs + (track.duration_ms ?? 0));
     }
 
-    const voiceByParticipant = new Map<string, TrackRow & { participant_name: string }>();
-    for (const track of tracks) {
-      if (track.type === "screen") continue;
-      const existing = voiceByParticipant.get(track.participant_id);
-      const score = (t: TrackRow) => (t.enhanced ? 2 : 0) + (t.type === "pcm" ? 1 : 0);
-      if (!existing || score(track) > score(existing)) {
-        voiceByParticipant.set(track.participant_id, track);
-      }
-    }
     const audioTracks = [
-      ...voiceByParticipant.values(),
+      ...selectVoiceTracks(tracks, (track) => fs.existsSync(wavTrackPath(track.id))),
       ...tracks.filter((t) => t.type === "screen"), // screen/system audio, if captured
     ];
     for (const track of audioTracks) {

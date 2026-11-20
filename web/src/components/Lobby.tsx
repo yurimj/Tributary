@@ -28,7 +28,7 @@ export function Lobby({
   const [microphoneId, setMicrophoneId] = useState<string>("");
   const [preset, setPreset] = useState<QualityPreset>("standard");
   const [headphones, setHeadphones] = useState(false);
-  const [recordWav, setRecordWav] = useState(true);
+  const [recordWav, setRecordWav] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [micLevel, setMicLevel] = useState(0);
@@ -178,11 +178,11 @@ export function Lobby({
               onChange={(e) => setRecordWav(e.target.checked)}
               className="h-4 w-4 accent-accent"
             />
-            Studio-quality WAV audio track
+            Extra uncompressed audio (experimental)
           </label>
           <p className="text-xs text-gray-500">
-            Records an extra uncompressed 48kHz audio track straight from your mic — the best
-            source for post-production.
+            WAV downloads are included without this option. Enable only to test an extra
+            uncompressed mic recording; it may contain glitches on some devices.
           </p>
           <Button onClick={join} disabled={!stream} className="mt-2 w-full">
             {joinLabel}
