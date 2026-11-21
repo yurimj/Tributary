@@ -45,14 +45,22 @@ export function EditorPage() {
     () => (data?.tracks ?? []).filter((t) => t.status === "ready" && t.duration_ms),
     [data]
   );
-  const videoTracks = readyTracks.filter((t) => t.width !== null);
+  const videoTracks = useMemo(() => readyTracks.filter((t) => t.width !== null), [readyTracks]);
   // Audio for participants without video comes from their WAV.
-  const audioOnlyTracks = readyTracks.filter(
-    (t) =>
-      t.width === null &&
-      t.type !== "screen" &&
-      !videoTracks.some((v) => v.participant_id === t.participant_id)
-  );
+  const audioOnlyTracks = useMemo(() => {
+    const byParticipant = new Map<string, Track>();
+    for (const track of readyTracks) {
+      if (track.width !== null || track.type === "screen" ||
+          videoTracks.some((v) => v.type !== "screen" && v.participant_id === track.participant_id)) continue;
+      const previous = byParticipant.get(track.participant_id);
+      if (!previous || (track.type === "camera" && previous.type === "pcm")) {
+        byParticipant.set(track.participant_id, track);
+      }
+    }
+    return [...byParticipant.values()];
+  }, [readyTracks, videoTracks]);
+  const playbackTracks = useMemo(() => [...videoTracks, ...audioOnlyTracks], [videoTracks, audioOnlyTracks]);
+  const pendingPlay = useRef(new WeakSet<HTMLMediaElement>());
   const durationMs = useMemo(
     () =>
       Math.max(
@@ -64,19 +72,22 @@ export function EditorPage() {
   const effectiveTrimEnd = trimEndMs ?? durationMs;
 
   const seek = useCallback((ms: number, clampToTrim = false) => {
-    const target = Math.max(0, Math.min(ms, playheadRef.current === ms ? ms : ms));
-    playheadRef.current = clampToTrim ? Math.max(0, target) : target;
+    const lower = clampToTrim ? trimStartMs : 0;
+    const upper = clampToTrim ? effectiveTrimEnd : durationMs;
+    const target = Math.max(lower, Math.min(ms, upper));
+    playheadRef.current = target;
     setPlayheadMs(playheadRef.current);
-  }, []);
+  }, [trimStartMs, effectiveTrimEnd, durationMs]);
 
   // Master clock: advance the playhead, keep every media element in sync,
   // hop over cut ranges, stop at trim end.
   useEffect(() => {
     playingRef.current = playing;
     let raf = 0;
-    let lastTs = 0;
+    let lastTs: number | null = null;
+    let lastPaintTs = 0;
     const tick = (ts: number) => {
-      if (lastTs && playingRef.current) {
+      if (lastTs !== null && playingRef.current) {
         let next = playheadRef.current + (ts - lastTs);
         for (const cut of cuts) {
           if (next >= cut.startMs && next < cut.endMs) next = cut.endMs;
@@ -87,27 +98,38 @@ export function EditorPage() {
           setPlaying(false);
         }
         playheadRef.current = next;
-        setPlayheadMs(next);
+        // Keep the media clock independent of React rendering. Updating the
+        // whole editor at display refresh rate also re-renders every word.
+        if (ts - lastPaintTs >= 100 || !playingRef.current) {
+          setPlayheadMs(next);
+          lastPaintTs = ts;
+        }
       }
       lastTs = ts;
 
-      for (const track of [...videoTracks, ...audioOnlyTracks]) {
+      for (const track of playbackTracks) {
         const el = mediaRefs.current.get(track.id);
         if (!el) continue;
         const local = (playheadRef.current - Math.max(0, track.start_offset_ms)) / 1000;
         const active =
           playingRef.current && local >= 0 && local < (track.duration_ms ?? 0) / 1000;
-        if (Math.abs(el.currentTime - Math.max(0, local)) > 0.3) {
+        if (el.readyState >= 1 && !el.seeking && Math.abs(el.currentTime - Math.max(0, local)) > 0.3) {
           el.currentTime = Math.max(0, Math.min(local, (track.duration_ms ?? 0) / 1000));
         }
-        if (active && el.paused) void el.play().catch(() => {});
+        if (active && el.paused && !pendingPlay.current.has(el)) {
+          pendingPlay.current.add(el);
+          void el.play().catch(() => {}).finally(() => pendingPlay.current.delete(el));
+        }
         if (!active && !el.paused) el.pause();
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [playing, cuts, effectiveTrimEnd, videoTracks, audioOnlyTracks]);
+    return () => {
+      cancelAnimationFrame(raf);
+      for (const el of mediaRefs.current.values()) el.pause();
+    };
+  }, [playing, cuts, effectiveTrimEnd, playbackTracks]);
 
   const timelineClick = (e: React.MouseEvent) => {
     const rect = timelineRef.current?.getBoundingClientRect();
