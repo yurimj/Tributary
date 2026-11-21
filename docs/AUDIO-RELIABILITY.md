@@ -18,6 +18,11 @@ remains separate in mixes. Source offsets are retained to preserve synchronizati
 
 ## Existing sessions
 
+- Existing `kind=wav` download links on PCM rows now serve the ready MediaRecorder
+  WAV for the same participant and take, when available. The filename identifies
+  the selected source and `X-Tributary-Audio-Source` reports its track ID. Raw
+  downloads still return the original PCM. If no parallel WAV exists, the original
+  PCM WAV remains the fallback.
 - Download **WAV (recommended)** from the participant's **camera** row. This is
   the decoded MediaRecorder recording, separate from **audio (experimental PCM)**.
 - Choose **Create mixed audio/video** again to generate an export using the new

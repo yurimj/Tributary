@@ -88,8 +88,28 @@ export function registerMediaRoutes(app: FastifyInstance): void {
         return streamFile(req, reply, rawTrackPath(trackId, ext), `${base}.raw.${ext}`,
           track.mime_type.split(";")[0] || "video/webm");
       }
-      case "wav":
-        return streamFile(req, reply, wavTrackPath(trackId), `${base}.wav`, "audio/wav");
+      case "wav": {
+        // Legacy links can point to the experimental PCM row. Resolve them to
+        // the parallel MediaRecorder WAV from the SAME take and participant.
+        // Keep raw PCM and its WAV on disk; never overwrite recorded media.
+        let source = track;
+        if (track.type === "pcm") {
+          const candidates = db.prepare(
+            `SELECT * FROM tracks WHERE recording_id = ? AND session_id = ?
+             AND participant_id = ? AND type = 'camera' AND status = 'ready'
+             ORDER BY ABS(start_offset_ms - ?) ASC, created_at ASC, id ASC`
+          ).all(track.recording_id, track.session_id, track.participant_id, track.start_offset_ms) as TrackRow[];
+          const candidate = candidates.find((t) => {
+            const file = wavTrackPath(t.id);
+            return fs.existsSync(file) && fs.statSync(file).size > 44;
+          });
+          if (candidate) source = { ...candidate, participant_name: track.participant_name };
+        }
+        reply.header("Cache-Control", "no-store");
+        reply.header("X-Tributary-Audio-Source", source.id);
+        const filename = trackDownloadBase(track.participant_name, source.type, source.id);
+        return streamFile(req, reply, wavTrackPath(source.id), `${filename}.wav`, "audio/wav");
+      }
       case "enhanced":
         return streamFile(req, reply, enhancedWavPath(trackId), `${base}.enhanced.wav`, "audio/wav");
       case "mp4":
